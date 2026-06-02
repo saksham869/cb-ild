@@ -1,6 +1,5 @@
 package org.mifos.creditbureau.cb_ild.exception;
 
-import lombok.extern.slf4j.Slf4j;
 
 /**
  * Thrown when real CDC mode is requested but not yet configured.
@@ -17,12 +16,9 @@ import lombok.extern.slf4j.Slf4j;
  * Security:
  *   Message is generic — no internal implementation details exposed
  */
-@Slf4j
 public class CdcNotConfiguredException extends RuntimeException {
 
     public CdcNotConfiguredException() {
         super("CDC integration not configured — contact administrator");
-        log.error("Real CDC mode requested but not yet implemented. " +
-                "Set mifos.cdc.mock.enabled=true for development.");
     }
 }
