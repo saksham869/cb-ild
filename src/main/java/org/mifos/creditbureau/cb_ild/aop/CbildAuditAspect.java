@@ -4,36 +4,33 @@ import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
-import org.mifos.creditbureau.cb_ild.entity.AuditEntry;
-import org.mifos.creditbureau.cb_ild.repository.AuditEntryRepository;
 import org.slf4j.MDC;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * AOP aspect for automatic audit logging.
  *
  * Intercepts all methods annotated with @Auditable.
- * Saves AuditEntry to audit_entry table after every call.
+ * Delegates audit persistence to AuditPersistenceService.
  *
- * CRITICAL:
- *   Uses @Transactional(REQUIRES_NEW) — audit entry is saved
- *   even if the main transaction rolls back.
- *   This ensures audit trail is never lost.
+ * CRITICAL — audit persistence is in a SEPARATE @Service bean.
+ * This ensures @Transactional(REQUIRES_NEW) fires through
+ * Spring's proxy. Self-invocation (this.method()) bypasses
+ * the proxy and breaks REQUIRES_NEW — that was the original bug.
  *
  * Security:
  *   Never logs nationalId or RFC anywhere
  *   userId from SecurityContextHolder — JWT claim
  *   requestId from MDC — set by CorrelationIdFilter
- *   errorMessage truncated to 500 chars
+ *   errorMessage truncated to 500 chars before passing to service
  *
  * Compliance:
  *   Every @Auditable method call creates one AuditEntry
  *   SUCCESS or FAILURE recorded with duration
  *   Audit entries never deleted
+ *   Entry saved even if main transaction rolls back (REQUIRES_NEW)
  */
 @Slf4j
 @Aspect
@@ -44,10 +41,10 @@ public class CbildAuditAspect {
     private static final String RESULT_SUCCESS = "SUCCESS";
     private static final String RESULT_FAILURE = "FAILURE";
 
-    private final AuditEntryRepository auditEntryRepository;
+    private final AuditPersistenceService auditPersistenceService;
 
-    public CbildAuditAspect(AuditEntryRepository auditEntryRepository) {
-        this.auditEntryRepository = auditEntryRepository;
+    public CbildAuditAspect(AuditPersistenceService auditPersistenceService) {
+        this.auditPersistenceService = auditPersistenceService;
     }
 
     /**
@@ -74,7 +71,9 @@ public class CbildAuditAspect {
             Object result = joinPoint.proceed();
             long duration = System.currentTimeMillis() - startTime;
 
-            saveAuditEntry(action, entityType, userId,
+            // Calls through Spring proxy — REQUIRES_NEW fires correctly
+            auditPersistenceService.saveAuditEntry(
+                    action, entityType, userId,
                     requestId, duration, RESULT_SUCCESS, null);
 
             return result;
@@ -84,42 +83,14 @@ public class CbildAuditAspect {
             String errorMessage = truncate(ex.getMessage(),
                     MAX_ERROR_MESSAGE_LENGTH);
 
-            saveAuditEntry(action, entityType, userId,
+            // Calls through Spring proxy — REQUIRES_NEW fires correctly
+            auditPersistenceService.saveAuditEntry(
+                    action, entityType, userId,
                     requestId, duration, RESULT_FAILURE, errorMessage);
 
             // CRITICAL: always rethrow — never swallow exceptions
             throw ex;
         }
-    }
-
-    /**
-     * Saves audit entry with REQUIRES_NEW propagation.
-     * Survives main transaction rollback.
-     */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    protected void saveAuditEntry(
-            String action,
-            String entityType,
-            String userId,
-            String requestId,
-            long durationMs,
-            String result,
-            String errorMessage) {
-
-        AuditEntry entry = AuditEntry.builder()
-                .action(action)
-                .entityType(entityType)
-                .performedBy(userId)
-                .requestId(requestId)
-                .durationMs(durationMs)
-                .result(result)
-                .errorMessage(errorMessage)
-                .build();
-
-        auditEntryRepository.save(entry);
-
-        log.debug("Audit saved — action: {}, result: {}, duration: {}ms",
-                action, result, durationMs);
     }
 
     /**
@@ -131,7 +102,8 @@ public class CbildAuditAspect {
         try {
             Authentication auth = SecurityContextHolder
                     .getContext().getAuthentication();
-            if (auth != null && auth.isAuthenticated()) {
+            if (auth != null && auth.isAuthenticated()
+                    && !"anonymousUser".equals(auth.getName())) {
                 return auth.getName();
             }
         } catch (Exception e) {

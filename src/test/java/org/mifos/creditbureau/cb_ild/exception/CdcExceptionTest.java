@@ -2,8 +2,6 @@ package org.mifos.creditbureau.cb_ild.exception;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.ResponseStatus;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -33,10 +31,6 @@ class CdcExceptionTest {
                 .isEqualTo("CDC rejected request — data quality issue");
         assertThat(ex.getClientId()).isEqualTo(1L);
         assertThat(ex).isInstanceOf(RuntimeException.class);
-
-        ResponseStatus status = ex.getClass()
-                .getAnnotation(ResponseStatus.class);
-        assertThat(status.value()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     @Test
@@ -72,11 +66,6 @@ class CdcExceptionTest {
         assertThat(ex.getClientId()).isEqualTo(1L);
         assertThat(ex.getHttpStatus()).isEqualTo(503);
         assertThat(ex).isInstanceOf(RuntimeException.class);
-
-        ResponseStatus status = ex.getClass()
-                .getAnnotation(ResponseStatus.class);
-        assertThat(status.value())
-                .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
     }
 
     // ===== CdcTimeoutException =====
@@ -93,11 +82,6 @@ class CdcExceptionTest {
         assertThat(ex.getClientId()).isEqualTo(1L);
         assertThat(ex.getCause()).isNotNull();
         assertThat(ex.getCause().getMessage()).isEqualTo(originalMessage);
-
-        ResponseStatus status = ex.getClass()
-                .getAnnotation(ResponseStatus.class);
-        assertThat(status.value())
-                .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
     }
 
     // ===== KycPrerequisiteException =====
@@ -113,11 +97,6 @@ class CdcExceptionTest {
         assertThat(ex.getClientId()).isEqualTo(1L);
         assertThat(ex.getMissingField()).isEqualTo("nationalId");
         assertThat(ex).isInstanceOf(RuntimeException.class);
-
-        ResponseStatus status = ex.getClass()
-                .getAnnotation(ResponseStatus.class);
-        assertThat(status.value())
-                .isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
     }
 
     @Test

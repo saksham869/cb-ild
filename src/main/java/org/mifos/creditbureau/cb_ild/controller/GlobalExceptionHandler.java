@@ -2,9 +2,12 @@ package org.mifos.creditbureau.cb_ild.controller;
 
 import lombok.extern.slf4j.Slf4j;
 import org.mifos.creditbureau.cb_ild.exception.CdcBadRequestException;
+import org.mifos.creditbureau.cb_ild.exception.CdcNotConfiguredException;
 import org.mifos.creditbureau.cb_ild.exception.CdcServerException;
 import org.mifos.creditbureau.cb_ild.exception.CdcTimeoutException;
+import org.mifos.creditbureau.cb_ild.exception.FineractConnectionException;
 import org.mifos.creditbureau.cb_ild.exception.FineractNotFoundException;
+import org.mifos.creditbureau.cb_ild.exception.FineractServerException;
 import org.mifos.creditbureau.cb_ild.exception.KycPrerequisiteException;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
@@ -99,6 +102,52 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.NOT_FOUND)
                 .body(buildResponse(
                         "FINERACT_CLIENT_NOT_FOUND",
+                        ex.getMessage()));
+    }
+
+    // ===== CDC NOT CONFIGURED — 503 =====
+
+    @ExceptionHandler(CdcNotConfiguredException.class)
+    public ResponseEntity<ErrorResponse> handleCdcNotConfigured(
+            CdcNotConfiguredException ex) {
+        log.error("CDC not configured — requestId: {}",
+                MDC.get("requestId"));
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(buildResponse(
+                        "CDC_NOT_CONFIGURED",
+                        ex.getMessage()));
+    }
+
+    // ===== FINERACT CONNECTION ERROR — 504 =====
+
+    @ExceptionHandler(FineractConnectionException.class)
+    public ResponseEntity<ErrorResponse> handleFineractConnection(
+            FineractConnectionException ex) {
+        // Fineract unreachable — retry eligible
+        // Angular: show "Core banking system unreachable — try again"
+        log.error("Fineract connection error — requestId: {}",
+                MDC.get("requestId"));
+        return ResponseEntity
+                .status(HttpStatus.GATEWAY_TIMEOUT)
+                .body(buildResponse(
+                        "FINERACT_UNREACHABLE",
+                        ex.getMessage()));
+    }
+
+    // ===== FINERACT SERVER ERROR — 503 =====
+
+    @ExceptionHandler(FineractServerException.class)
+    public ResponseEntity<ErrorResponse> handleFineractServer(
+            FineractServerException ex) {
+        // Fineract returned 5xx — retry eligible
+        // Angular: show "Core banking system error — try again"
+        log.error("Fineract server error — requestId: {}",
+                MDC.get("requestId"));
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(buildResponse(
+                        "FINERACT_SERVER_ERROR",
                         ex.getMessage()));
     }
 

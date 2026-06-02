@@ -1,8 +1,5 @@
 package org.mifos.creditbureau.cb_ild.exception;
 
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.ResponseStatus;
 
 /**
  * Thrown when KYC prerequisite not met — RFC missing.
@@ -24,8 +21,6 @@ import org.springframework.web.bind.annotation.ResponseStatus;
  *   clientId stored internally — never in Angular message
  *   Message is generic — never exposes actual RFC value
  */
-@Slf4j
-@ResponseStatus(HttpStatus.UNPROCESSABLE_ENTITY)
 public class KycPrerequisiteException extends RuntimeException {
 
     private final Long clientId;
@@ -35,8 +30,6 @@ public class KycPrerequisiteException extends RuntimeException {
         super("KYC prerequisite not met — RFC/National ID required before CDC submission");
         this.clientId = clientId;
         this.missingField = missingField;
-        log.warn("KYC prerequisite failed for clientId: {} — missing field: {}",
-                clientId, missingField);
     }
 
     public Long getClientId() {

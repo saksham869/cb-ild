@@ -125,7 +125,8 @@ public class FineractApiClient {
             if (body == null) {
                 log.error("Fineract returned empty body for clientId: {}",
                         clientId);
-                throw new FineractServerException(200);
+                // 502 Bad Gateway — Fineract returned 200 but with empty body
+                throw new FineractServerException(502);
             }
             return body;
 

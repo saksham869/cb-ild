@@ -3,6 +3,7 @@ package org.mifos.creditbureau.cb_ild.service.cdc;
 import lombok.extern.slf4j.Slf4j;
 import org.mifos.creditbureau.cb_ild.entity.BureauResponseEntity;
 import org.mifos.creditbureau.cb_ild.repository.BureauResponseRepository;
+import org.mifos.creditbureau.cb_ild.exception.CdcNotConfiguredException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -87,8 +88,7 @@ public class CdcScorePullServiceImpl implements ICdcScorePullService {
 
         // Phase 2 — real CDC call (not implemented yet)
         // Waiting for: Yu Wati endpoint confirmation + CDC credentials
-        throw new UnsupportedOperationException(
-                "Real CDC mode not implemented yet — set mifos.cdc.mock.enabled=true");
+        throw new CdcNotConfiguredException();
     }
 
     /**

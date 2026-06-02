@@ -6,7 +6,9 @@ import org.junit.jupiter.api.Test;
 import org.mifos.creditbureau.cb_ild.exception.CdcBadRequestException;
 import org.mifos.creditbureau.cb_ild.exception.CdcServerException;
 import org.mifos.creditbureau.cb_ild.exception.CdcTimeoutException;
+import org.mifos.creditbureau.cb_ild.exception.FineractConnectionException;
 import org.mifos.creditbureau.cb_ild.exception.FineractNotFoundException;
+import org.mifos.creditbureau.cb_ild.exception.FineractServerException;
 import org.mifos.creditbureau.cb_ild.exception.KycPrerequisiteException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -144,5 +146,34 @@ class GlobalExceptionHandlerTest {
                 handler.handleGeneric(new RuntimeException("test"));
 
         assertThat(response.getBody().requestId()).isEqualTo("unknown");
+    }
+
+    @Test
+    @DisplayName("FineractConnectionException → 504 + FINERACT_UNREACHABLE")
+    void handleFineractConnection_returns504_withCorrectCode() {
+        FineractConnectionException ex =
+                new FineractConnectionException("Connection timed out");
+
+        ResponseEntity<ErrorResponse> response =
+                handler.handleFineractConnection(ex);
+
+        assertThat(response.getStatusCode())
+                .isEqualTo(HttpStatus.GATEWAY_TIMEOUT);
+        assertThat(response.getBody().code())
+                .isEqualTo("FINERACT_UNREACHABLE");
+    }
+
+    @Test
+    @DisplayName("FineractServerException → 503 + FINERACT_SERVER_ERROR")
+    void handleFineractServer_returns503_withCorrectCode() {
+        FineractServerException ex = new FineractServerException(502);
+
+        ResponseEntity<ErrorResponse> response =
+                handler.handleFineractServer(ex);
+
+        assertThat(response.getStatusCode())
+                .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(response.getBody().code())
+                .isEqualTo("FINERACT_SERVER_ERROR");
     }
 }

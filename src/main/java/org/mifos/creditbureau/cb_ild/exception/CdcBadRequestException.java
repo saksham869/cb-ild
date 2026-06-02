@@ -1,8 +1,5 @@
 package org.mifos.creditbureau.cb_ild.exception;
 
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.ResponseStatus;
 
 /**
  * Thrown when CDC returns 4xx — data quality problem.
@@ -20,8 +17,6 @@ import org.springframework.web.bind.annotation.ResponseStatus;
  *   clientId stored internally — never in Angular message
  *   responseBody never logged — may contain PII
  */
-@Slf4j
-@ResponseStatus(HttpStatus.BAD_REQUEST)
 public class CdcBadRequestException extends RuntimeException {
 
     private final Long clientId;
@@ -33,8 +28,6 @@ public class CdcBadRequestException extends RuntimeException {
         this.truncatedBody = responseBody != null
                 ? responseBody.substring(0, Math.min(responseBody.length(), 200))
                 : null;
-        log.error("CDC bad request for clientId: {} — check data quality",
-                clientId);
     }
 
     public Long getClientId() {

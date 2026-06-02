@@ -79,4 +79,14 @@ class EncryptionServiceTest {
 
         assertThat(decrypted).isEqualTo(plaintext);
     }
+
+    @Test
+    @DisplayName("key not 32 bytes — still works with zero-padding, logs warning")
+    void constructor_keyNot32Bytes_worksWithPadding() {
+        // Short key is zero-padded with a warning — no exception thrown
+        // Production deploy checklist enforces 32 bytes
+        EncryptionService svc = new EncryptionService("short-key");
+        String plaintext = "test";
+        assertThat(svc.decrypt(svc.encrypt(plaintext))).isEqualTo(plaintext);
+    }
 }

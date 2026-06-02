@@ -48,7 +48,7 @@ class BureauResponseEntityTest {
                 .dateOfFirstDelinquency(delinquencyDate)
                 .rawResponseHash("a".repeat(64))
                 .softDeleted(false)
-                .expiryDate(now.plusMonths(72))
+                .expiryDate(delinquencyDate.plusMonths(72))
                 .build();
 
         assertThat(entity.getClientId()).isEqualTo(1L);
