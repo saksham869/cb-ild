@@ -4,6 +4,9 @@
   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.0.xsd">
   <changeSet id="V5-archive-tables" author="satyam">
+    <preConditions onFail="MARK_RAN">
+      <not><tableExists tableName="bureau_response_archive"/></not>
+    </preConditions>
     <createTable tableName="bureau_response_archive">
       <column name="id" type="BIGINT"><constraints primaryKey="true"/></column>
       <column name="client_id" type="BIGINT"/>

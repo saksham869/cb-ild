@@ -4,6 +4,7 @@ import org.mifos.creditbureau.cb_ild.entity.BureauResponseEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -43,4 +44,16 @@ public interface BureauResponseRepository
      */
     List<BureauResponseEntity>
         findAllByClientIdOrderByPulledAtDesc(Long clientId);
+
+    /**
+     * All non-deleted rows where expiryDate is before the given date.
+     * Used by RetentionService — finds rows eligible for archiving.
+     * @SQLRestriction adds soft_deleted=false automatically.
+     * Rows with null expiryDate excluded by JPA automatically.
+     *
+     * SQL: SELECT * FROM bureau_response
+     *      WHERE expiry_date < ? AND soft_deleted = false
+     */
+    List<BureauResponseEntity>
+        findAllByExpiryDateBefore(LocalDate date);
 }
