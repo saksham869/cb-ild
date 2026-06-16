@@ -2,6 +2,7 @@ package org.mifos.creditbureau.cb_ild.aop;
 
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
+import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.aspectj.lang.annotation.Around;
@@ -55,9 +56,11 @@ public class CbildAuditAspect {
      * Records action, userId, requestId, duration, result.
      * Always rethrows exceptions — never swallows.
      */
-    @Around("@annotation(auditable)")
-    public Object audit(ProceedingJoinPoint joinPoint,
-                        Auditable auditable) throws Throwable {
+    @Around("@annotation(org.mifos.creditbureau.cb_ild.aop.Auditable)")
+    public Object audit(ProceedingJoinPoint joinPoint) throws Throwable {
+
+        MethodSignature methodSignature = (MethodSignature) joinPoint.getSignature();
+        Auditable auditable = methodSignature.getMethod().getAnnotation(Auditable.class);
 
         long startTime = System.currentTimeMillis();
         String action = auditable.action().isEmpty()

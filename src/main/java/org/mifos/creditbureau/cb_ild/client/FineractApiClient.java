@@ -16,7 +16,9 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -53,6 +55,12 @@ public class FineractApiClient {
 
     private static final ParameterizedTypeReference<List<FineractAddressDTO>>
             ADDRESS_LIST_TYPE = new ParameterizedTypeReference<>() {};
+
+    // Page size for getAllActiveClientIds() pagination. Confirmed live
+    // against mifos-bank-1: 7 active clients total as of June 2026, so
+    // a single page covers the whole sandbox today. 100 leaves headroom
+    // for production-sized client bases without excessive page count.
+    private static final int CLIENT_LIST_PAGE_SIZE = 100;
 
     /**
      * Constructor injection — never @Autowired on fields.
@@ -106,6 +114,88 @@ public class FineractApiClient {
     }
 
     /**
+     * Fetches all active client IDs from Fineract, paginated.
+     *
+     * Calls GET /clients?status=active&limit={pageSize}&offset={offset}
+     * repeatedly until all pages are retrieved, based on
+     * totalFilteredRecords from the first response.
+     *
+     * Confirmed live against mifos-bank-1 (June 2026):
+     *   GET /clients?limit=20&status=active
+     *     -> totalFilteredRecords: 7, all 7 returned in one page
+     *
+     * Used by:
+     *   SubmissionServiceImpl.runBatch() (MX-273) - when called without an
+     *   explicit clientIds list, processes every active client.
+     *
+     * Pagination details and per-item filtering are in collectActiveIds()
+     * (RULE 11 — kept under 40 lines).
+     *
+     * @return list of active client IDs, possibly empty, never null
+     * @throws FineractServerException if Fineract returns 5xx on first page
+     * @throws FineractConnectionException if Fineract unreachable on first page
+     */
+    public List<Long> getAllActiveClientIds() {
+        log.info("Fetching all active client IDs from Fineract");
+
+        List<Long> clientIds = collectActiveIds();
+
+        log.info("Fetched {} active client IDs from Fineract", clientIds.size());
+        return clientIds;
+    }
+
+    /**
+     * Pagination loop for getAllActiveClientIds(). Extracted to keep
+     * getAllActiveClientIds() under the 40-line method limit (RULE 11).
+     *
+     * NEVER throws on individual page failures after the first page — if
+     * a later page fails, returns whatever was successfully collected so
+     * far. The first page failing propagates normally via
+     * fetchClientListPage(offset, isFirstPage=true).
+     *
+     * client.active() is checked defensively even though status=active is
+     * passed in the query — belt-and-suspenders against any Fineract
+     * version difference in how the status filter is applied.
+     */
+    private List<Long> collectActiveIds() {
+        List<Long> clientIds = new ArrayList<>();
+        int offset = 0;
+        int totalFilteredRecords = -1;
+
+        while (totalFilteredRecords == -1 || offset < totalFilteredRecords) {
+            FineractClientListResponse page = fetchClientListPage(offset, offset == 0);
+
+            if (page == null) {
+                log.warn("Stopping client list pagination early at offset: {} - "
+                        + "returning {} client IDs collected so far",
+                        offset, clientIds.size());
+                break;
+            }
+
+            if (totalFilteredRecords == -1) {
+                totalFilteredRecords = page.totalFilteredRecords();
+                log.debug("Fineract reports totalFilteredRecords: {}", totalFilteredRecords);
+            }
+
+            if (page.pageItems() == null || page.pageItems().isEmpty()) {
+                log.warn("Empty pageItems at offset: {} with totalFilteredRecords: {} - "
+                        + "stopping pagination", offset, totalFilteredRecords);
+                break;
+            }
+
+            for (FineractClientListResponse.FineractClientListItem item : page.pageItems()) {
+                if (item.active()) {
+                    clientIds.add(item.id());
+                }
+            }
+
+            offset += page.pageItems().size();
+        }
+
+        return clientIds;
+    }
+
+    /**
      * Calls GET /clients/{id} for basic client information.
      * Only call that throws on failure — without basic data nothing works.
      */
@@ -143,6 +233,74 @@ public class FineractApiClient {
             log.error("Cannot connect to Fineract for clientId: {}",
                     clientId);
             throw new FineractConnectionException(e.getMessage());
+        }
+    }
+
+    /**
+     * Calls GET /clients?status=active&limit={pageSize}&offset={offset}
+     * for one page of the active client list.
+     *
+     * @param offset    pagination offset
+     * @param isFirstPage if true, failures throw (propagate to caller of
+     *                    getAllActiveClientIds()); if false, failures return
+     *                    null so pagination stops gracefully with partial
+     *                    results already collected.
+     * @return the page response, or null if a non-first-page call failed
+     * @throws FineractServerException if isFirstPage and Fineract returns 5xx
+     * @throws FineractConnectionException if isFirstPage and Fineract unreachable
+     */
+    private FineractClientListResponse fetchClientListPage(int offset, boolean isFirstPage) {
+        String url = UriComponentsBuilder.fromUriString(baseUrl + "/clients")
+                .queryParam("status", "active")
+                .queryParam("limit", CLIENT_LIST_PAGE_SIZE)
+                .queryParam("offset", offset)
+                .toUriString();
+
+        log.debug("Calling Fineract GET /clients?status=active&limit={}&offset={}",
+                CLIENT_LIST_PAGE_SIZE, offset);
+
+        try {
+            ResponseEntity<FineractClientListResponse> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    buildHttpEntity(),
+                    FineractClientListResponse.class
+            );
+
+            FineractClientListResponse body = response.getBody();
+            if (body == null) {
+                log.error("Fineract returned empty body for client list at offset: {}",
+                        offset);
+                if (isFirstPage) {
+                    throw new FineractServerException(502);
+                }
+                return null;
+            }
+            return body;
+
+        } catch (HttpServerErrorException e) {
+            log.error("Fineract server error for client list at offset: {}, status: {}",
+                    offset, e.getStatusCode().value());
+            if (isFirstPage) {
+                throw new FineractServerException(e.getStatusCode().value());
+            }
+            return null;
+
+        } catch (ResourceAccessException e) {
+            log.error("Cannot connect to Fineract for client list at offset: {}",
+                    offset);
+            if (isFirstPage) {
+                throw new FineractConnectionException(e.getMessage());
+            }
+            return null;
+
+        } catch (HttpClientErrorException e) {
+            log.error("Fineract client error for client list at offset: {}, status: {}",
+                    offset, e.getStatusCode().value());
+            if (isFirstPage) {
+                throw new FineractServerException(e.getStatusCode().value());
+            }
+            return null;
         }
     }
 
