@@ -151,6 +151,35 @@ public class GlobalExceptionHandler {
                         ex.getMessage()));
     }
 
+
+    // ===== ILLEGAL ARGUMENT -- 400 =====
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalArgument(
+            IllegalArgumentException ex) {
+        log.warn("Invalid argument - requestId: {}, message: {}",
+                MDC.get("requestId"), ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(buildResponse(
+                        "INVALID_ARGUMENT",
+                        ex.getMessage()));
+    }
+
+    // ===== ILLEGAL STATE TRANSITION -- 400 =====
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalState(
+            IllegalStateException ex) {
+        log.warn("Invalid state transition - requestId: {}, message: {}",
+                MDC.get("requestId"), ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(buildResponse(
+                        "INVALID_STATE_TRANSITION",
+                        ex.getMessage()));
+    }
+
     // ===== GENERIC FALLBACK — 500 =====
 
     @ExceptionHandler(Exception.class)
