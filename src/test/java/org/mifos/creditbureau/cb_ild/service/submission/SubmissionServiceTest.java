@@ -64,6 +64,8 @@ class SubmissionServiceTest {
 
     @Mock
     private SubmissionRetryProperties retryProperties;
+    @Mock
+    private org.mifos.creditbureau.cb_ild.client.CdcPluginClient cdcPluginClient;
 
     private SubmissionServiceImpl service;
 
@@ -79,7 +81,8 @@ class SubmissionServiceTest {
                 fineractApiClient,
                 kycScoringService,
                 retryProperties,
-                true
+                true,
+                cdcPluginClient
         );
     }
 

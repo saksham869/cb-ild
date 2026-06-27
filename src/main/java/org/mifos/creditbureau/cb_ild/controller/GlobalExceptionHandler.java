@@ -10,6 +10,7 @@ import org.mifos.creditbureau.cb_ild.exception.FineractNotFoundException;
 import org.mifos.creditbureau.cb_ild.exception.FineractServerException;
 import org.mifos.creditbureau.cb_ild.exception.KycPrerequisiteException;
 import org.slf4j.MDC;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -151,6 +152,19 @@ public class GlobalExceptionHandler {
                         ex.getMessage()));
     }
 
+
+    // ===== ACCESS DENIED — 403 =====
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(
+            AccessDeniedException ex) {
+        log.warn("Access denied — requestId: {}", MDC.get("requestId"));
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(buildResponse(
+                        "ACCESS_DENIED",
+                        "You do not have permission to perform this action"));
+    }
 
     // ===== ILLEGAL ARGUMENT -- 400 =====
 

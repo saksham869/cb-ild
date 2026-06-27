@@ -7,6 +7,7 @@ import org.mifos.creditbureau.cb_ild.client.FineractClientData;
 import org.mifos.creditbureau.cb_ild.entity.SubmissionRecord;
 import org.mifos.creditbureau.cb_ild.entity.enums.SubmissionStatus;
 import org.mifos.creditbureau.cb_ild.entity.enums.TriggerType;
+import org.mifos.creditbureau.cb_ild.client.CdcPluginClient;
 import org.mifos.creditbureau.cb_ild.exception.CdcNotConfiguredException;
 import org.mifos.creditbureau.cb_ild.repository.SubmissionRecordRepository;
 import org.mifos.creditbureau.cb_ild.service.kyc.IKycScoringService;
@@ -59,6 +60,7 @@ public class SubmissionServiceImpl implements ISubmissionService {
     private final IKycScoringService kycScoringService;
     private final SubmissionRetryProperties retryProperties;
     private final boolean mockEnabled;
+    private final CdcPluginClient cdcPluginClient;
 
     // Constructor injection — never @Autowired on fields.
     // Same mifos.cdc.mock.enabled property as CdcScorePullServiceImpl — one
@@ -69,12 +71,14 @@ public class SubmissionServiceImpl implements ISubmissionService {
             FineractApiClient fineractApiClient,
             IKycScoringService kycScoringService,
             SubmissionRetryProperties retryProperties,
-            @Value("${mifos.cdc.mock.enabled:true}") boolean mockEnabled) {
+            @Value("${mifos.cdc.mock.enabled:true}") boolean mockEnabled,
+            CdcPluginClient cdcPluginClient) {
         this.submissionRecordRepository = submissionRecordRepository;
         this.fineractApiClient = fineractApiClient;
         this.kycScoringService = kycScoringService;
         this.retryProperties = retryProperties;
         this.mockEnabled = mockEnabled;
+        this.cdcPluginClient = cdcPluginClient;
         log.info("SubmissionServiceImpl initialized — mockEnabled: {}, maxAttempts: {}, retryIntervalMinutes: {}",
                 mockEnabled, retryProperties.getMaxAttempts(), retryProperties.getRetryIntervalMinutes());
     }
@@ -305,9 +309,31 @@ public class SubmissionServiceImpl implements ISubmissionService {
             return new CdcSubmissionResult(true, mockReferenceId, null);
         }
 
-        // Phase 2 — real CDC call (not implemented yet)
-        // Waiting for: Victor's CDC credentials, cb_register_params loaded
-        throw new CdcNotConfiguredException();
+        // Phase 2 — real CDC call via plugin (MX-276)
+        // Re-throw known exceptions so GlobalExceptionHandler returns
+        // correct HTTP status (503 for CdcNotConfiguredException,
+        // 503 for CdcTimeoutException, 400 for CdcBadRequestException).
+        // Only catch truly unexpected exceptions as PENDING_RETRY.
+        try {
+            java.util.Map<String, Object> report =
+                    cdcPluginClient.fetchCreditReport(clientId);
+            String folioConsulta = report.get("reportId") != null
+                    ? report.get("reportId").toString()
+                    : "CDC-" + java.util.UUID.randomUUID();
+            log.info("CDC submission accepted — clientId: {}", clientId);
+            return new CdcSubmissionResult(true, folioConsulta, null);
+        } catch (org.mifos.creditbureau.cb_ild.exception.CdcNotConfiguredException e) {
+            throw e; // 503 — not retryable
+        } catch (org.mifos.creditbureau.cb_ild.exception.CdcTimeoutException e) {
+            throw e; // 503 — retryable via scheduler
+        } catch (org.mifos.creditbureau.cb_ild.exception.CdcServerException e) {
+            throw e; // 503 — retryable via scheduler
+        } catch (Exception e) {
+            log.error("Unexpected CDC error — clientId: {}, error: {}",
+                    clientId, e.getMessage());
+            return new CdcSubmissionResult(false, null,
+                    "Unexpected CDC error: " + e.getClass().getSimpleName());
+        }
     }
 
     /**

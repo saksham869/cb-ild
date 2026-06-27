@@ -34,6 +34,8 @@ class CdcScorePullServiceTest {
 
     @Mock
     private BureauResponseRepository repository;
+    @Mock
+    private org.mifos.creditbureau.cb_ild.client.CdcPluginClient cdcPluginClient;
 
     private CdcScorePullServiceImpl service;
 
@@ -43,7 +45,7 @@ class CdcScorePullServiceTest {
     @BeforeEach
     void setUp() {
         // Construct manually — @Value not available in unit tests
-        service = new CdcScorePullServiceImpl(repository, MOCK_ENABLED);
+        service = new CdcScorePullServiceImpl(repository, MOCK_ENABLED, cdcPluginClient);
     }
 
     // ===== TEST 1 — Mock mode saves entity =====

@@ -9,6 +9,9 @@ import org.mifos.creditbureau.cb_ild.service.submission.ISubmissionService;
 import org.mifos.creditbureau.cb_ild.service.submission.SubmissionRecordResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.web.PagedResourcesAssembler;
+import org.springframework.hateoas.PagedModel;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -130,10 +133,11 @@ public class SubmissionController {
      */
     @GetMapping("/history")
     @PreAuthorize("hasAnyRole('CREDIT_ANALYST', 'COMPLIANCE')")
-    public ResponseEntity<Page<SubmissionRecordResponse>> getSubmissionHistory(
+    public ResponseEntity<PagedModel<SubmissionRecordResponse>> getSubmissionHistory(
             @RequestParam Long clientId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            PagedResourcesAssembler<SubmissionRecordResponse> assembler) {
 
         log.info("Submission history request — clientId: {}, page: {}, size: {}",
                 clientId, page, size);
@@ -144,7 +148,9 @@ public class SubmissionController {
         Page<SubmissionRecordResponse> response =
                 records.map(SubmissionRecordResponse::from);
 
-        return ResponseEntity.ok(response);
+        @SuppressWarnings("unchecked")
+        var pagedModel = (PagedModel<SubmissionRecordResponse>)(Object) assembler.toModel(response);
+        return ResponseEntity.ok(pagedModel);
     }
 
     /**

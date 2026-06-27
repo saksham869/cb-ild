@@ -1,6 +1,7 @@
 package org.mifos.creditbureau.cb_ild.controller;
 
 import lombok.extern.slf4j.Slf4j;
+import org.mifos.creditbureau.cb_ild.dto.DisputeResponse;
 import org.mifos.creditbureau.cb_ild.entity.DisputeCase;
 import org.mifos.creditbureau.cb_ild.repository.DisputeCaseRepository;
 import org.mifos.creditbureau.cb_ild.service.dispute.IDisputeService;
@@ -41,7 +42,7 @@ public class DisputeController {
 
     @PostMapping
     @PreAuthorize("hasAnyRole('KYC_OFFICER', 'CREDIT_ANALYST', 'COMPLIANCE')")
-    public ResponseEntity<DisputeCase> createDispute(
+    public ResponseEntity<DisputeResponse> createDispute(
             @RequestBody CreateDisputeRequest request) {
         log.info("Create dispute - submissionRecordId: {}",
                 request.submissionRecordId());
@@ -49,30 +50,30 @@ public class DisputeController {
                 request.submissionRecordId(),
                 request.disputeDetails(),
                 request.raisedBy());
-        return ResponseEntity.ok(dispute);
+        return ResponseEntity.ok(DisputeResponse.from(dispute));
     }
 
     @PutMapping("/{id}/status")
     @PreAuthorize("hasAnyRole('KYC_OFFICER', 'CREDIT_ANALYST', 'COMPLIANCE')")
-    public ResponseEntity<DisputeCase> updateStatus(
+    public ResponseEntity<DisputeResponse> updateStatus(
             @PathVariable Long id,
             @RequestBody UpdateStatusRequest request) {
         log.info("Update dispute status - id: {}, newStatus: {}",
                 id, request.newStatus());
         DisputeCase updated = disputeService.updateStatus(
                 id, request.newStatus(), request.resolutionNotes());
-        return ResponseEntity.ok(updated);
+        return ResponseEntity.ok(DisputeResponse.from(updated));
     }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('KYC_OFFICER', 'CREDIT_ANALYST', 'COMPLIANCE')")
-    public ResponseEntity<DisputeCase> getDispute(
+    public ResponseEntity<DisputeResponse> getDispute(
             @PathVariable Long id) {
         log.info("Get dispute - id: {}", id);
         DisputeCase dispute = disputeCaseRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "DisputeCase not found: " + id));
-        return ResponseEntity.ok(dispute);
+        return ResponseEntity.ok(DisputeResponse.from(dispute));
     }
 
     public record CreateDisputeRequest(

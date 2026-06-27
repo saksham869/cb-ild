@@ -3,6 +3,8 @@ package org.mifos.creditbureau.cb_ild.service.cdc;
 import lombok.extern.slf4j.Slf4j;
 import org.mifos.creditbureau.cb_ild.entity.BureauResponseEntity;
 import org.mifos.creditbureau.cb_ild.repository.BureauResponseRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.mifos.creditbureau.cb_ild.client.CdcPluginClient;
 import org.mifos.creditbureau.cb_ild.exception.CdcNotConfiguredException;
 import org.mifos.creditbureau.cb_ild.aop.Auditable;
 import org.springframework.beans.factory.annotation.Value;
@@ -51,13 +53,16 @@ public class CdcScorePullServiceImpl implements ICdcScorePullService {
 
     private final BureauResponseRepository repository;
     private final boolean mockEnabled;
+    private final CdcPluginClient cdcPluginClient;
 
     // Constructor injection — never @Autowired on fields
     public CdcScorePullServiceImpl(
             BureauResponseRepository repository,
-            @Value("${mifos.cdc.mock.enabled:true}") boolean mockEnabled) {
+            @Value("${mifos.cdc.mock.enabled:true}") boolean mockEnabled,
+            CdcPluginClient cdcPluginClient) {
         this.repository = repository;
         this.mockEnabled = mockEnabled;
+        this.cdcPluginClient = cdcPluginClient;
         log.info("CdcScorePullServiceImpl initialized — mockEnabled: {}",
                 mockEnabled);
     }
@@ -88,14 +93,124 @@ public class CdcScorePullServiceImpl implements ICdcScorePullService {
             return pullAndSaveMock(clientId);
         }
 
-        // Phase 2 — real CDC call (not implemented yet)
-        // Waiting for: Yu Wati endpoint confirmation + CDC credentials
-        throw new CdcNotConfiguredException();
+        // Phase 2 — real CDC call via plugin (MX-276)
+        return pullAndSaveReal(clientId);
+    }
+
+    /**
+     * Real mode implementation (MX-276).
+     * Calls plugin -> CDC -> maps response -> saves to bureau_response.
+     *
+     * Score: CDC basic RCC endpoint does not return FICO score.
+     * ficoScore = null, riskBand derived from peorAtraso (worst delinquency).
+     * hasDelinquencies = any creditAccount with saldoVencido > 0.
+     */
+    @SuppressWarnings("unchecked")
+    private BureauResponseEntity pullAndSaveReal(Long clientId) {
+        java.util.Map<String, Object> report =
+                cdcPluginClient.fetchCreditReport(clientId);
+
+        // Extract credit accounts from CBCreditReportData
+        java.util.List<java.util.Map<String, Object>> accounts =
+                report.get("creditAccounts") != null
+                ? (java.util.List<java.util.Map<String, Object>>) report.get("creditAccounts")
+                : java.util.List.of();
+
+        // Derive riskBand from peorAtraso (worst delinquency months)
+        int worstDelinquency = accounts.stream()
+                .mapToInt(a -> {
+                    Object wd = a.get("worstDelinquency");
+                    if (wd == null) return 0;
+                    try { return Integer.parseInt(wd.toString()); }
+                    catch (NumberFormatException e) { return 0; }
+                })
+                .max()
+                .orElse(0);
+
+        String riskBand = worstDelinquency == 0 ? "LOW"
+                : worstDelinquency <= 30 ? "MEDIUM"
+                : worstDelinquency <= 90 ? "HIGH"
+                : "VERY_HIGH";
+
+        // hasDelinquencies = any account with pastDueAmount > 0
+        boolean hasDelinquencies = accounts.stream()
+                .anyMatch(a -> {
+                    Object pda = a.get("pastDueAmount");
+                    if (pda == null) return false;
+                    try { return Double.parseDouble(pda.toString()) > 0; }
+                    catch (NumberFormatException e) { return false; }
+                });
+
+        // dateOfFirstDelinquency = earliest worstDelinquencyDate
+        // CDC returns dates as dd/MM/yyyy — parse to LocalDate before sorting
+        // String sort would give wrong result on non-ISO format
+        java.time.format.DateTimeFormatter cdcDateFmt =
+                java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy");
+        String dateOfFirstDelinquency = accounts.stream()
+                .map(a -> a.get("worstDelinquencyDate"))
+                .filter(d -> d != null && !d.toString().isBlank())
+                .map(Object::toString)
+                .sorted((a, b) -> {
+                    try {
+                        return java.time.LocalDate.parse(a, cdcDateFmt)
+                                .compareTo(java.time.LocalDate.parse(b, cdcDateFmt));
+                    } catch (Exception e) {
+                        return a.compareTo(b); // fallback to string sort
+                    }
+                })
+                .findFirst()
+                .orElse(null);
+
+        // LRSIC rule: retain 72 months from first delinquency date.
+        // If no delinquency, retain 72 months from pull date (LocalDate.now()).
+        java.time.LocalDate expiryDate = dateOfFirstDelinquency != null
+                ? java.time.LocalDate.parse(dateOfFirstDelinquency, cdcDateFmt)
+                        .plusMonths(72)
+                : java.time.LocalDate.now().plusMonths(72);
+
+        // Tradelines as JSON string
+        String tradelines = null;
+        try {
+            tradelines = new ObjectMapper().writeValueAsString(accounts);
+        } catch (Exception e) {
+            log.warn("Failed to serialize tradelines — clientId: {}", clientId);
+        }
+
+        // Score drop detection
+        Optional<BureauResponseEntity> previous =
+                repository.findTopByClientIdOrderByPulledAtDesc(clientId);
+        boolean scoreDropAlert = false; // no FICO to compare
+
+        // SHA-256 of folioConsulta (CDC reference ID — not PII)
+        String folioConsulta = report.get("reportId") != null
+                ? report.get("reportId").toString() : "unknown-" + clientId;
+        String rawResponseHash = sha256(folioConsulta);
+
+        BureauResponseEntity entity = BureauResponseEntity.builder()
+                .clientId(clientId)
+                .bureauType(BUREAU_TYPE)
+                .ficoScore(null)
+                .riskBand(riskBand)
+                .hasDelinquencies(hasDelinquencies)
+                .scoreDropAlert(scoreDropAlert)
+                .tradelines(tradelines)
+                .rawResponseHash(rawResponseHash)
+                .fullResponse(null)
+                .dateOfFirstDelinquency(dateOfFirstDelinquency != null
+                        ? java.time.LocalDate.parse(dateOfFirstDelinquency, cdcDateFmt) : null)
+                .expiryDate(expiryDate)
+                .softDeleted(false)
+                .build();
+
+        BureauResponseEntity saved = repository.save(entity);
+        log.info("CDC real score pull complete — clientId: {}, riskBand: {}",
+                clientId, riskBand);
+        return saved;
     }
 
     /**
      * Mock mode implementation.
-     * Saves ficoScore=750 to bureau_response — no external calls.
+     * Saves ficoScore=750 to bureau_response — no external calls. 
      */
     private BureauResponseEntity pullAndSaveMock(Long clientId) {
 

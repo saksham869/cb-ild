@@ -2,72 +2,117 @@ package org.mifos.creditbureau.cb_ild.config.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
- * Spring Security configuration — Phase 1.
+ * Spring Security configuration — MX-276 (Phase 2).
  *
- * Phase 1 design (confirmed by Victor — no OAuth2 on mifos-bank-1):
- *   Permit all requests — no authentication enforcement.
- *   CSRF disabled — CB-ILD is a stateless REST API, not a browser app.
- *   Stateless sessions — no server-side session storage.
+ * Phase 1 was permitAll() — no auth enforcement.
+ * MX-276 activates Basic Auth + RBAC via @EnableMethodSecurity
+ * on CbIldApplication.
  *
- * Why @EnableMethodSecurity is NOT here in Phase 1:
- *   @PreAuthorize on BureauReadinessController requires roles.
- *   In permit-all mode, SecurityContextHolder has anonymousUser.
- *   anonymousUser has no roles — @PreAuthorize blocks all requests.
- *   @EnableMethodSecurity added in Phase 2 when real auth configured.
+ * Auth: HTTP Basic — same pattern as mifos-x-credit-bureau-plugin.
+ * Fineract sandbox uses Basic auth (Victor confirmed no OAuth2).
+ * JWT can replace Basic auth in a later phase without changing any
+ * @PreAuthorize rules — role names stay identical.
  *
- * Phase 2 plan:
- *   1. Add Basic Auth or API key validation
- *   2. Add @EnableMethodSecurity to this class
- *   3. @PreAuthorize on controller enforces roles automatically
- *   4. No JWT — Victor confirmed no OAuth2 on mifos-bank-1
+ * RBAC roles (3 roles, matching all @PreAuthorize annotations):
+ *   KYC_OFFICER    — bureau readiness + disputes
+ *   CREDIT_ANALYST — submissions + disputes
+ *   COMPLIANCE     — everything above
  *
- * CorrelationIdFilter:
- *   Runs at HIGHEST_PRECEDENCE before this security filter chain.
- *   Sets requestId + userId in MDC.
- *   userId = "anonymous" in Phase 1 — recorded in audit_entry.
+ * Session: STATELESS — no HttpSession created or used.
+ * CSRF: disabled — REST API, no browser form submissions.
  *
- * Security maintained in Phase 1:
- *   CSRF disabled — no browser session cookies
- *   Stateless — no HttpSession created
- *   No hardcoded credentials
- *   Audit trail active — every @Auditable call recorded
- *   userId = "anonymous" in all audit entries until Phase 2
+ * Actuator + Swagger: permitted without auth for monitoring.
+ * All other endpoints: require authentication.
+ * Role enforcement: done by @PreAuthorize (activated by
+ * @EnableMethodSecurity on CbIldApplication).
+ *
+ * Passwords: {noop} prefix = plain text, no encoding.
+ * Production: replace with BCrypt + secrets manager.
  */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
     /**
-     * Phase 1 security filter chain.
-     * Stateless + CSRF disabled + permit all.
+     * Security filter chain — MX-276.
      *
-     * Phase 2: replace permitAll() with authentication requirements.
+     * permitAll paths:
+     *   /actuator/** — health checks, metrics
+     *   /v3/api-docs/** — Swagger/OpenAPI schema
+     *   /swagger-ui/** — Swagger UI
+     *
+     * All other paths require authentication.
+     * Role-level enforcement handled by @PreAuthorize on controllers.
      */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http)
             throws Exception {
-
         http
-            // CSRF disabled — stateless REST API, no browser cookies
-            .csrf(AbstractHttpConfigurer::disable)
-
-            // Stateless — no server-side sessions
+            .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session
-                    .sessionCreationPolicy(
-                            SessionCreationPolicy.STATELESS))
-
-            // Phase 1 — permit all requests
-            // Phase 2 — replace with authentication requirements
+                .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                    .anyRequest().permitAll());
-
+                .requestMatchers(
+                    "/actuator/**",
+                    "/v3/api-docs/**",
+                    "/swagger-ui/**",
+                    "/swagger-ui.html")
+                .permitAll()
+                .anyRequest().authenticated())
+            .httpBasic(Customizer.withDefaults());
         return http.build();
+    }
+
+    /**
+     * In-memory users — 3 roles matching RBAC table.
+     *
+     * KYC_OFFICER:
+     *   GET  /api/clients/{id}/bureau-readiness
+     *   POST /api/disputes
+     *   PUT  /api/disputes/{id}/status
+     *   GET  /api/disputes/{id}
+     *
+     * CREDIT_ANALYST:
+     *   POST /api/submissions/run
+     *   GET  /api/submissions/history
+     *   POST /api/disputes
+     *   PUT  /api/disputes/{id}/status
+     *   GET  /api/disputes/{id}
+     *
+     * COMPLIANCE: all of the above.
+     *
+     * Production: replace with database-backed UserDetailsService
+     * or LDAP/OAuth2 integration.
+     */
+    @Bean
+    public UserDetailsService userDetailsService() {
+        UserDetails kycOfficer = User.withUsername("kyc_officer")
+                .password("{noop}password")
+                .roles("KYC_OFFICER")
+                .build();
+
+        UserDetails creditAnalyst = User.withUsername("credit_analyst")
+                .password("{noop}password")
+                .roles("CREDIT_ANALYST")
+                .build();
+
+        UserDetails compliance = User.withUsername("compliance")
+                .password("{noop}password")
+                .roles("COMPLIANCE")
+                .build();
+
+        return new InMemoryUserDetailsManager(
+                kycOfficer, creditAnalyst, compliance);
     }
 }
