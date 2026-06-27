@@ -5,6 +5,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mifos.creditbureau.cb_ild.repository.BureauResponseRepository;
+import org.mifos.creditbureau.cb_ild.repository.AuditEntryRepository;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mifos.creditbureau.cb_ild.exception.FineractNotFoundException;
 import org.mifos.creditbureau.cb_ild.service.bureau.IBureauReadinessService;
@@ -32,6 +34,10 @@ class BureauReadinessControllerTest {
 
     @Mock
     private IBureauReadinessService bureauReadinessService;
+    @Mock
+    private BureauResponseRepository bureauResponseRepository;
+    @Mock
+    private AuditEntryRepository auditEntryRepository;
 
     private BureauReadinessController controller;
 
@@ -39,7 +45,7 @@ class BureauReadinessControllerTest {
 
     @BeforeEach
     void setUp() {
-        controller = new BureauReadinessController(bureauReadinessService);
+        controller = new BureauReadinessController(bureauReadinessService, bureauResponseRepository, auditEntryRepository);
     }
 
     private KycReadinessResult fullResult() {

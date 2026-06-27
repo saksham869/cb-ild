@@ -142,7 +142,8 @@ class CbildAuditAspectTest {
                 eq("BureauResponse"),
                 any(), any(), any(Long.class),
                 eq("SUCCESS"),
-                eq(null));
+                eq(null),
+                any());
     }
 
     @Test
@@ -162,7 +163,8 @@ class CbildAuditAspectTest {
                 eq("Test"),
                 any(), any(), any(Long.class),
                 eq("FAILURE"),
-                eq("CDC failed"));
+                eq("CDC failed"),
+                any());
     }
 
     @Test
@@ -191,7 +193,7 @@ class CbildAuditAspectTest {
                 ArgumentCaptor.forClass(String.class);
         verify(auditPersistenceService).saveAuditEntry(
                 actionCaptor.capture(),
-                any(), any(), any(), any(Long.class), any(), any());
+                any(), any(), any(), any(Long.class), any(), any(), any());
 
         assertThat(actionCaptor.getValue()).isEqualTo("MY_ACTION");
     }
@@ -210,7 +212,7 @@ class CbildAuditAspectTest {
                 ArgumentCaptor.forClass(String.class);
         verify(auditPersistenceService).saveAuditEntry(
                 actionCaptor.capture(),
-                any(), any(), any(), any(Long.class), any(), any());
+                any(), any(), any(), any(Long.class), any(), any(), any());
 
         assertThat(actionCaptor.getValue()).isEqualTo("pullAndSave");
     }

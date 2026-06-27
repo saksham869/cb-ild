@@ -5,6 +5,7 @@ import org.mifos.creditbureau.cb_ild.dto.DisputeResponse;
 import org.mifos.creditbureau.cb_ild.entity.DisputeCase;
 import org.mifos.creditbureau.cb_ild.repository.DisputeCaseRepository;
 import org.mifos.creditbureau.cb_ild.service.dispute.IDisputeService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -50,7 +51,8 @@ public class DisputeController {
                 request.submissionRecordId(),
                 request.disputeDetails(),
                 request.raisedBy());
-        return ResponseEntity.ok(DisputeResponse.from(dispute));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(DisputeResponse.from(dispute));
     }
 
     @PutMapping("/{id}/status")

@@ -3,6 +3,8 @@ package org.mifos.creditbureau.cb_ild.aop;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.reflect.MethodSignature;
+import java.lang.reflect.Parameter;
+import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.aspectj.lang.annotation.Around;
@@ -78,9 +80,10 @@ public class CbildAuditAspect {
             long duration = System.currentTimeMillis() - startTime;
 
             // Calls through Spring proxy — REQUIRES_NEW fires correctly
+            Long clientId = extractClientId(joinPoint);
             auditPersistenceService.saveAuditEntry(
                     action, entityType, userId,
-                    requestId, duration, RESULT_SUCCESS, null);
+                    requestId, duration, RESULT_SUCCESS, null, clientId);
 
             return result;
 
@@ -90,9 +93,10 @@ public class CbildAuditAspect {
                     MAX_ERROR_MESSAGE_LENGTH);
 
             // Calls through Spring proxy — REQUIRES_NEW fires correctly
+            Long clientId = extractClientId(joinPoint);
             auditPersistenceService.saveAuditEntry(
                     action, entityType, userId,
-                    requestId, duration, RESULT_FAILURE, errorMessage);
+                    requestId, duration, RESULT_FAILURE, errorMessage, clientId);
 
             // CRITICAL: always rethrow — never swallow exceptions
             throw ex;
@@ -104,6 +108,28 @@ public class CbildAuditAspect {
      * Returns "anonymous" if not authenticated.
      * Never logs actual user credentials.
      */
+    /**
+     * Extracts clientId from @PathVariable named "id" or "clientId".
+     * Returns null if no such path variable found — audit still saved.
+     */
+    private Long extractClientId(ProceedingJoinPoint joinPoint) {
+        try {
+            MethodSignature sig = (MethodSignature) joinPoint.getSignature();
+            Parameter[] params = sig.getMethod().getParameters();
+            Object[] args = joinPoint.getArgs();
+            for (int i = 0; i < params.length; i++) {
+                String name = params[i].getName();
+                if (("id".equals(name) || "clientId".equals(name))
+                        && args[i] instanceof Long) {
+                    return (Long) args[i];
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Could not extract clientId from method args");
+        }
+        return null;
+    }
+
     private String extractUserId() {
         try {
             Authentication auth = SecurityContextHolder

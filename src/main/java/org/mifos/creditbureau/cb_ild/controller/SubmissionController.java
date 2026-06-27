@@ -23,6 +23,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import org.mifos.creditbureau.cb_ild.entity.enums.TriggerType;
+import org.mifos.creditbureau.cb_ild.entity.enums.SubmissionStatus;
+import org.mifos.creditbureau.cb_ild.service.submission.SubmissionRecordResponse;
+import org.springframework.format.annotation.DateTimeFormat;
+import java.time.LocalDateTime;
 
 /**
  * REST controller for the CDC submission pipeline (MX-273).
@@ -160,4 +165,102 @@ public class SubmissionController {
      * "all active clients" (see runSubmissions() Javadoc).
      */
     public record RunSubmissionsRequest(List<Long> clientIds) {}
+
+    /**
+     * GET /api/submissions/schedule
+     *
+     * Returns all PENDING_RETRY records with their next retry schedule.
+     * Angular Tab 2 — retry queue view.
+     *
+     * @return 200 + list of pending retry records
+     */
+    @GetMapping("/schedule")
+    @PreAuthorize("hasAnyRole('CREDIT_ANALYST', 'COMPLIANCE')")
+    public ResponseEntity<List<SubmissionRecordResponse>> getRetrySchedule() {
+        log.info("Retry schedule requested");
+        List<SubmissionRecordResponse> schedule = submissionRecordRepository
+                .findByStatus(SubmissionStatus.PENDING_RETRY)
+                .stream()
+                .map(SubmissionRecordResponse::from)
+                .toList();
+        return ResponseEntity.ok(schedule);
+    }
+
+    /**
+     * POST /api/submissions/report-screening
+     *
+     * Trigger 3 — LRSIC inquiry logging rule.
+     * Required for every screening event.
+     * inquiryType must be HARD or SOFT.
+     *
+     * @param request clientId, loanId (nullable), inquiryType
+     * @return 201 + SubmissionRecordResponse
+     */
+    @PostMapping("/report-screening")
+    @PreAuthorize("hasRole('KYC_OFFICER')")
+    @Auditable(action = "SUBMISSION_SCREENING", entityType = "SubmissionRecord")
+    public ResponseEntity<SubmissionRecordResponse> reportScreening(
+            @RequestBody ReportScreeningRequest request) {
+        log.info("Report screening — clientId: {}, inquiryType: {}",
+                request.clientId(), request.inquiryType());
+        if (!"HARD".equals(request.inquiryType()) && !"SOFT".equals(request.inquiryType())) {
+            throw new IllegalArgumentException(
+                    "inquiryType must be HARD or SOFT, got: " + request.inquiryType());
+        }
+        var record = submissionService.submitClient(
+                request.clientId(),
+                TriggerType.SCREENING_EVENT,
+                request.loanId(),
+                request.inquiryType());
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(SubmissionRecordResponse.from(record));
+    }
+
+    /**
+     * POST /api/submissions/report-approval
+     *
+     * Trigger 2 — fires after loan officer approves a loan.
+     * Smart pre-check: KYC score >= 70 AND CDC reachable.
+     * NEVER blocks loan approval flow — returns 200 with warning if pre-check fails.
+     *
+     * @param request clientId, loanId
+     * @return 201 if submitted, 200 with warning if pre-check failed
+     */
+    @PostMapping("/report-approval")
+    @PreAuthorize("hasAnyRole('CREDIT_ANALYST', 'COMPLIANCE')")
+    @Auditable(action = "SUBMISSION_LOAN_APPROVAL", entityType = "SubmissionRecord")
+    public ResponseEntity<SubmissionRecordResponse> reportApproval(
+            @RequestBody ReportApprovalRequest request) {
+        log.info("Report approval — clientId: {}, loanId: {}",
+                request.clientId(), request.loanId());
+        try {
+            var record = submissionService.submitClient(
+                    request.clientId(),
+                    TriggerType.LOAN_APPROVAL,
+                    request.loanId(),
+                    null);
+            // ACCEPTED → 201, anything else → 200 with warning
+            int status = "ACCEPTED".equals(record.getStatus().name())
+                    ? HttpStatus.CREATED.value()
+                    : HttpStatus.OK.value();
+            return ResponseEntity.status(status)
+                    .body(SubmissionRecordResponse.from(record));
+        } catch (Exception e) {
+            // CRITICAL: NEVER block loan approval flow
+            // Log the error but return 200 — loan approval must proceed
+            log.error("CDC submission failed for loan approval — clientId: {}, loanId: {}. " +
+                    "Loan approval NOT blocked. Error: {}", 
+                    request.clientId(), request.loanId(), e.getMessage());
+            return ResponseEntity.ok().build();
+        }
+    }
+
+    public record ReportScreeningRequest(
+            Long clientId,
+            Long loanId,
+            String inquiryType) {}
+
+    public record ReportApprovalRequest(
+            Long clientId,
+            Long loanId) {}
 }

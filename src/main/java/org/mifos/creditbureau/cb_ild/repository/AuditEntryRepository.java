@@ -5,6 +5,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.time.LocalDateTime;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 /**
  * Repository for audit_entry table.
@@ -32,4 +35,19 @@ public interface AuditEntryRepository
      */
     List<AuditEntry> findAllByPerformedByOrderByCreatedAtDesc(
             String performedBy);
+
+    /**
+     * Paginated audit entries for a client, newest first.
+     * Used by GET /api/clients/{id}/audit-trail (COMPLIANCE only).
+     * Optional date range filter via createdAt.
+     */
+    Page<AuditEntry> findByClientIdOrderByCreatedAtDesc(
+            Long clientId, Pageable pageable);
+
+    /**
+     * Paginated audit entries for a client within a date range.
+     * Used by GET /api/clients/{id}/audit-trail with startDate/endDate.
+     */
+    Page<AuditEntry> findByClientIdAndCreatedAtBetweenOrderByCreatedAtDesc(
+            Long clientId, LocalDateTime start, LocalDateTime end, Pageable pageable);
 }
