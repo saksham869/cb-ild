@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.mifos.creditbureau.cb_ild.entity.BureauResponseEntity;
 import org.mifos.creditbureau.cb_ild.repository.BureauResponseRepository;
 import org.mifos.creditbureau.cb_ild.exception.CdcNotConfiguredException;
+import org.mifos.creditbureau.cb_ild.aop.Auditable;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -72,6 +73,7 @@ public class CdcScorePullServiceImpl implements ICdcScorePullService {
      * Step 6: Build + save entity
      */
     @Override
+    @Auditable(action = "CDC_SCORE_PULL", entityType = "BureauResponse")
     @Transactional
     public BureauResponseEntity pullAndSave(Long clientId) {
 

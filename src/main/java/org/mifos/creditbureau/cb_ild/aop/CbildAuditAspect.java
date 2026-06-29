@@ -2,6 +2,8 @@ package org.mifos.creditbureau.cb_ild.aop;
 
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.slf4j.MDC;
@@ -35,6 +37,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Aspect
 @Component
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class CbildAuditAspect {
 
     private static final int MAX_ERROR_MESSAGE_LENGTH = 500;
