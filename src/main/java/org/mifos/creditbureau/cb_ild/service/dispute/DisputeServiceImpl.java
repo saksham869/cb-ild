@@ -117,7 +117,7 @@ public class DisputeServiceImpl implements IDisputeService {
 
         DisputeCase dispute = disputeCaseRepository.findById(disputeId)
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "DisputeCase not found: " + disputeId));
+                        "Dispute not found: " + disputeId));
 
         DisputeStatus target = parseStatus(newStatus);
         validateTransition(dispute.getStatus(), target);

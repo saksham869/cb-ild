@@ -63,6 +63,15 @@ public class SubmissionServiceImpl implements ISubmissionService {
     private final boolean mockEnabled;
     private final CdcPluginClient cdcPluginClient;
 
+    /**
+     * Self-proxy injection — required so runBatch() calls submitClient()
+     * through the Spring AOP proxy, ensuring @Auditable fires correctly.
+     * @Lazy breaks the circular dependency that would otherwise occur.
+     */
+    @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.context.annotation.Lazy
+    private SubmissionServiceImpl self;
+
     // Constructor injection — never @Autowired on fields.
     // Same mifos.cdc.mock.enabled property as CdcScorePullServiceImpl — one
     // flag controls both the Part 4 score pull and the Part 1+2 submission
@@ -179,7 +188,7 @@ public class SubmissionServiceImpl implements ISubmissionService {
 
         for (Long clientId : targets) {
             try {
-                SubmissionRecord result = submitClient(
+                SubmissionRecord result = self.submitClient(
                         clientId, TriggerType.MANUAL_BATCH, null, null);
                 results.add(result);
             } catch (Exception e) {
@@ -324,11 +333,17 @@ public class SubmissionServiceImpl implements ISubmissionService {
             log.info("CDC submission accepted — clientId: {}", clientId);
             return new CdcSubmissionResult(true, folioConsulta, null);
         } catch (org.mifos.creditbureau.cb_ild.exception.CdcNotConfiguredException e) {
-            throw e; // 503 — not retryable
+            throw e; // 503 — configuration error, not retryable, re-throw to controller
         } catch (org.mifos.creditbureau.cb_ild.exception.CdcTimeoutException e) {
-            throw e; // 503 — retryable via scheduler
+            // Retryable — return failure result so PENDING_RETRY record is saved
+            log.warn("CDC timeout for clientId: {} — scheduling PENDING_RETRY", clientId);
+            return new CdcSubmissionResult(false, null,
+                    "CDC timeout: " + e.getMessage());
         } catch (org.mifos.creditbureau.cb_ild.exception.CdcServerException e) {
-            throw e; // 503 — retryable via scheduler
+            // Retryable — return failure result so PENDING_RETRY record is saved
+            log.warn("CDC server error for clientId: {} — scheduling PENDING_RETRY", clientId);
+            return new CdcSubmissionResult(false, null,
+                    "CDC server error: " + e.getMessage());
         } catch (Exception e) {
             log.error("Unexpected CDC error — clientId: {}, error: {}",
                     clientId, e.getMessage());
@@ -368,6 +383,7 @@ public class SubmissionServiceImpl implements ISubmissionService {
                 .submittedAt(null)
                 .updatedAt(now)
                 .inquiryType(inquiryType)
+                .expiryDate(LocalDate.now().plusMonths(72))
                 .build();
 
         return submissionRecordRepository.save(record);

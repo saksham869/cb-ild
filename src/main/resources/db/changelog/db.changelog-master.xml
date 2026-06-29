@@ -16,4 +16,6 @@
   <include file="db/changelog/V9__submission_record_additions.xml"/>
   <include file="db/changelog/V9b__dispute_case_additions.xml"/>
   <include file="db/changelog/V10__audit_entry_client_id.xml"/>
+    <include file="db/changelog/V11__backfill_bureau_response_expiry.xml"/>
+
 </databaseChangeLog>

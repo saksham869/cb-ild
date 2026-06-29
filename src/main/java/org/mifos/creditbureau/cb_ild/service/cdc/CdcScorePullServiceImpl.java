@@ -1,5 +1,6 @@
 package org.mifos.creditbureau.cb_ild.service.cdc;
 
+import java.time.LocalDate;
 import lombok.extern.slf4j.Slf4j;
 import org.mifos.creditbureau.cb_ild.entity.BureauResponseEntity;
 import org.mifos.creditbureau.cb_ild.repository.BureauResponseRepository;
@@ -179,7 +180,21 @@ public class CdcScorePullServiceImpl implements ICdcScorePullService {
         // Score drop detection
         Optional<BureauResponseEntity> previous =
                 repository.findTopByClientIdOrderByPulledAtDesc(clientId);
-        boolean scoreDropAlert = false; // no FICO to compare
+        // Compare riskBand instead of ficoScore in real mode
+        // CDC RCC basic endpoint does not return FICO — use riskBand degradation
+        boolean scoreDropAlert = false;
+        if (previous.isPresent() && previous.get().getRiskBand() != null && riskBand != null) {
+            java.util.List<String> riskOrder = java.util.List.of(
+                    "LOW", "MEDIUM", "HIGH", "VERY_HIGH");
+            String prevRiskBand = previous.get().getRiskBand();
+            int prevIdx = riskOrder.indexOf(prevRiskBand.toUpperCase());
+            int currIdx = riskOrder.indexOf(riskBand.toUpperCase());
+            if (prevIdx >= 0 && currIdx >= 0 && currIdx > prevIdx) {
+                scoreDropAlert = true;
+                log.warn("Risk band degraded for clientId — {} -> {}",
+                        prevRiskBand, riskBand);
+            }
+        }
 
         // SHA-256 of folioConsulta (CDC reference ID — not PII)
         String folioConsulta = report.get("reportId") != null
@@ -240,7 +255,7 @@ public class CdcScorePullServiceImpl implements ICdcScorePullService {
                 .hasDelinquencies(false)
                 .softDeleted(false)
                 .fullResponse(null)
-                .expiryDate(null)
+                .expiryDate(LocalDate.now().plusMonths(72))
                 .dateOfFirstDelinquency(null)
                 .build();
 

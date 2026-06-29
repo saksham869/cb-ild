@@ -160,6 +160,58 @@ class SecurityConfigTest {
 
     // ===== Test 10: unauthenticated cannot raise disputes =====
 
+    // ===== Test 11: KYC_OFFICER cannot RESOLVE disputes (B-1 RBAC) =====
+
+    @Test
+    @DisplayName("KYC_OFFICER -> PUT /disputes/999/status RESOLVED -> 403")
+    void kycOfficer_resolveDispute_forbidden() throws Exception {
+        mockMvc.perform(put("/api/disputes/999/status")
+                .with(httpBasic("kyc_officer", "password"))
+                .contentType("application/json")
+                .content("{\"newStatus\":\"RESOLVED\",\"resolutionNotes\":\"test\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    // ===== Test 12: CREDIT_ANALYST cannot RESOLVE disputes (B-1 RBAC) =====
+
+    @Test
+    @DisplayName("CREDIT_ANALYST -> PUT /disputes/999/status RESOLVED -> 403")
+    void creditAnalyst_resolveDispute_forbidden() throws Exception {
+        mockMvc.perform(put("/api/disputes/999/status")
+                .with(httpBasic("credit_analyst", "password"))
+                .contentType("application/json")
+                .content("{\"newStatus\":\"RESOLVED\",\"resolutionNotes\":\"test\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    // ===== Test 13: KYC_OFFICER CAN move to UNDER_REVIEW (must still work) =====
+
+    @Test
+    @DisplayName("KYC_OFFICER -> PUT /disputes/999/status UNDER_REVIEW -> auth passed (not 401/403)")
+    void kycOfficer_moveToUnderReview_authPassed() throws Exception {
+        MvcResult result = mockMvc.perform(put("/api/disputes/999/status")
+                .with(httpBasic("kyc_officer", "password"))
+                .contentType("application/json")
+                .content("{\"newStatus\":\"UNDER_REVIEW\",\"resolutionNotes\":null}"))
+                .andReturn();
+        int status = result.getResponse().getStatus();
+        assertThat(status).isNotIn(401, 403);
+    }
+
+    // ===== Test 14: lowercase "resolved" also blocked for KYC_OFFICER (B-1 NB-1) =====
+
+    @Test
+    @DisplayName("KYC_OFFICER -> PUT /disputes/999/status resolved (lowercase) -> 403")
+    void kycOfficer_resolveDisputeLowercase_forbidden() throws Exception {
+        mockMvc.perform(put("/api/disputes/999/status")
+                .with(httpBasic("kyc_officer", "password"))
+                .contentType("application/json")
+                .content("{\"newStatus\":\"resolved\",\"resolutionNotes\":\"test\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    // ===== Test 10: unauthenticated cannot raise disputes =====
+
     @Test
     @DisplayName("unauthenticated -> POST /disputes -> 401")
     void unauthenticated_createDispute_returns401() throws Exception {

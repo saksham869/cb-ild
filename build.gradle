@@ -92,6 +92,10 @@ jacocoTestCoverageVerification {
 
 check.dependsOn jacocoTestCoverageVerification
 
+tasks.named('compileJava') {
+    options.compilerArgs += ['-parameters']
+}
+
 tasks.named('test') {
     useJUnitPlatform()
     finalizedBy jacocoTestReport

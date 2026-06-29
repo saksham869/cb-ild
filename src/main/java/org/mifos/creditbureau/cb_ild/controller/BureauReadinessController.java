@@ -120,6 +120,7 @@ public class BureauReadinessController {
     })
     @GetMapping("/{id}/bureau-response")
     @PreAuthorize("hasAnyRole('CREDIT_ANALYST', 'COMPLIANCE')")
+    @Auditable(action = "BUREAU_RESPONSE_READ", entityType = "BureauResponse")
     public ResponseEntity<BureauResponseDTO> getBureauResponse(
             @Parameter(description = "Fineract client ID", example = "5", required = true)
             @PathVariable Long id) {

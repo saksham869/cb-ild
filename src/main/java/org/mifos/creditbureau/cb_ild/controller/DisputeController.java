@@ -13,6 +13,7 @@ import org.mifos.creditbureau.cb_ild.service.dispute.IDisputeService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,7 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/disputes")
 @Tag(
     name = "3. Dispute Management",
-    description = "Dispute workflow — all 3 roles can access. State machine: OPEN -> UNDER_REVIEW -> RESOLVED."
+    description = "Dispute workflow. OPEN -> UNDER_REVIEW: all roles. UNDER_REVIEW -> RESOLVED: COMPLIANCE only."
 )
 public class DisputeController {
 
@@ -53,12 +54,11 @@ public class DisputeController {
 ```json
             {
               "submissionRecordId": 1,
-              "disputeDetails": "CDC balance shows 14714 but loan was fully repaid",
-              "raisedBy": "kyc_officer"
+              "disputeDetails": "CDC balance shows 14714 but loan was fully repaid"
             }
 ```
 
-            **Roles:** ALL roles (KYC_OFFICER, CREDIT_ANALYST, COMPLIANCE)
+            **Roles:** ALL roles can raise disputes (KYC_OFFICER, CREDIT_ANALYST, COMPLIANCE)
             """
     )
     @ApiResponses({
@@ -71,11 +71,14 @@ public class DisputeController {
     @PreAuthorize("hasAnyRole('KYC_OFFICER', 'CREDIT_ANALYST', 'COMPLIANCE')")
     public ResponseEntity<DisputeResponse> createDispute(
             @RequestBody CreateDisputeRequest request) {
-        log.info("Create dispute - submissionRecordId: {}", request.submissionRecordId());
+        String raisedBy = SecurityContextHolder.getContext()
+                .getAuthentication().getName();
+        log.info("Create dispute - submissionRecordId: {}, raisedBy: {}",
+                request.submissionRecordId(), raisedBy);
         DisputeCase dispute = disputeService.createDispute(
                 request.submissionRecordId(),
                 request.disputeDetails(),
-                request.raisedBy());
+                raisedBy);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(DisputeResponse.from(dispute));
     }
@@ -102,7 +105,7 @@ public class DisputeController {
             { "newStatus": "RESOLVED", "resolutionNotes": "Confirmed — corrected per LRSIC Article 23" }
 ```
 
-            **Roles:** ALL roles
+            **Roles:** OPEN -> UNDER_REVIEW: all roles. UNDER_REVIEW -> RESOLVED: COMPLIANCE only.
             """
     )
     @ApiResponses({
@@ -112,7 +115,9 @@ public class DisputeController {
         @ApiResponse(responseCode = "403", description = "Forbidden")
     })
     @PutMapping("/{id}/status")
-    @PreAuthorize("hasAnyRole('KYC_OFFICER', 'CREDIT_ANALYST', 'COMPLIANCE')")
+    @PreAuthorize("hasRole('COMPLIANCE') or " +
+            "(hasAnyRole('KYC_OFFICER', 'CREDIT_ANALYST') and " +
+            "(#request.newStatus == null or !#request.newStatus.toUpperCase().equals('RESOLVED')))")
     public ResponseEntity<DisputeResponse> updateStatus(
             @Parameter(description = "Dispute ID from POST /api/disputes", example = "1", required = true)
             @PathVariable Long id,
@@ -129,7 +134,7 @@ public class DisputeController {
             Returns the full dispute record.
             institutionDataSummary and cdcDataSummary are truncated to 200 chars.
 
-            **Roles:** ALL roles
+            **Roles:** OPEN -> UNDER_REVIEW: all roles. UNDER_REVIEW -> RESOLVED: COMPLIANCE only.
             """
     )
     @ApiResponses({
@@ -146,14 +151,13 @@ public class DisputeController {
         log.info("Get dispute - id: {}", id);
         DisputeCase dispute = disputeCaseRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "DisputeCase not found: " + id));
+                        "Dispute not found: " + id));
         return ResponseEntity.ok(DisputeResponse.from(dispute));
     }
 
     public record CreateDisputeRequest(
             Long submissionRecordId,
-            String disputeDetails,
-            String raisedBy) {}
+            String disputeDetails) {}
 
     public record UpdateStatusRequest(
             String newStatus,
