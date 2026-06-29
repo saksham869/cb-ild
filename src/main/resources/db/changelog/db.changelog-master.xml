@@ -5,6 +5,7 @@
   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.0.xsd">
   <include file="db/changelog/V1__bureau_response.xml"/>
+  <include file="db/changelog/V1b__bureau_response_additions.xml"/>
   <include file="db/changelog/V2__submission_record.xml"/>
   <include file="db/changelog/V3__dispute_case.xml"/>
   <include file="db/changelog/V4__audit_entry.xml"/>
