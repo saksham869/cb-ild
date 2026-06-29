@@ -84,8 +84,10 @@ public class BureauResponseEntity {
     private LocalDateTime pulledAt;
 
     // LRSIC 72-month rule — dateOfFirstDelinquency + 72 months
+    // LocalDate (not LocalDateTime) — matches dateOfFirstDelinquency type
+    // and avoids timezone conversion on MariaDB TIMESTAMP columns
     @Column(name = "expiry_date")
-    private LocalDateTime expiryDate;
+    private LocalDate expiryDate;
 
     // Never hard-delete — always softDeleted=true
     @Builder.Default

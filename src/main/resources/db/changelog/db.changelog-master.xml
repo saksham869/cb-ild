@@ -10,4 +10,7 @@
   <include file="db/changelog/V3__dispute_case.xml"/>
   <include file="db/changelog/V4__audit_entry.xml"/>
   <include file="db/changelog/V5__archive_tables.xml"/>
+  <include file="db/changelog/V6__audit_entry_additions.xml"/>
+  <include file="db/changelog/V7__archive_tables_autoincrement.xml"/>
+  <include file="db/changelog/V8__expiry_date_to_date.xml"/>
 </databaseChangeLog>
