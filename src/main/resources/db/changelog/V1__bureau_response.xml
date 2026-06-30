@@ -4,6 +4,9 @@
   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.0.xsd">
   <changeSet id="V1-bureau-response" author="satyam">
+    <preConditions onFail="MARK_RAN">
+      <not><tableExists tableName="bureau_response"/></not>
+    </preConditions>
     <createTable tableName="bureau_response">
       <column name="id" type="BIGINT" autoIncrement="true"><constraints primaryKey="true"/></column>
       <column name="client_id" type="BIGINT"><constraints nullable="false"/></column>
