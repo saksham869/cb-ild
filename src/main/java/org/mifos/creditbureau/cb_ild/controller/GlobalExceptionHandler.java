@@ -10,6 +10,7 @@ import org.mifos.creditbureau.cb_ild.exception.FineractNotFoundException;
 import org.mifos.creditbureau.cb_ild.exception.FineractServerException;
 import org.mifos.creditbureau.cb_ild.exception.KycPrerequisiteException;
 import org.slf4j.MDC;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -148,6 +149,48 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(buildResponse(
                         "FINERACT_SERVER_ERROR",
+                        ex.getMessage()));
+    }
+
+
+    // ===== ACCESS DENIED — 403 =====
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(
+            AccessDeniedException ex) {
+        log.warn("Access denied — requestId: {}", MDC.get("requestId"));
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(buildResponse(
+                        "ACCESS_DENIED",
+                        "You do not have permission to perform this action"));
+    }
+
+    // ===== ILLEGAL ARGUMENT -- 400 =====
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalArgument(
+            IllegalArgumentException ex) {
+        log.warn("Invalid argument - requestId: {}, message: {}",
+                MDC.get("requestId"), ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(buildResponse(
+                        "INVALID_ARGUMENT",
+                        ex.getMessage()));
+    }
+
+    // ===== ILLEGAL STATE TRANSITION -- 400 =====
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalState(
+            IllegalStateException ex) {
+        log.warn("Invalid state transition - requestId: {}, message: {}",
+                MDC.get("requestId"), ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(buildResponse(
+                        "INVALID_STATE_TRANSITION",
                         ex.getMessage()));
     }
 

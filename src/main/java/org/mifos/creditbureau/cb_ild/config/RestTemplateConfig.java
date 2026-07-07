@@ -35,12 +35,18 @@ public class RestTemplateConfig {
 
     private final String fineractUsername;
     private final String fineractPassword;
+    private final String pluginUsername;
+    private final String pluginPassword;
 
     public RestTemplateConfig(
             @Value("${mifos.fineract.api.username}") String fineractUsername,
-            @Value("${mifos.fineract.api.password}") String fineractPassword) {
+            @Value("${mifos.fineract.api.password}") String fineractPassword,
+            @Value("${cbild.plugin.username:tester}") String pluginUsername,
+            @Value("${cbild.plugin.password:tempPassword123}") String pluginPassword) {
         this.fineractUsername = fineractUsername;
         this.fineractPassword = fineractPassword;
+        this.pluginUsername = pluginUsername;
+        this.pluginPassword = pluginPassword;
     }
 
     /**
@@ -69,7 +75,7 @@ public class RestTemplateConfig {
         return builder
                 .setConnectTimeout(Duration.ofSeconds(10))
                 .setReadTimeout(Duration.ofSeconds(30))
-                .basicAuthentication(fineractUsername, fineractPassword)
+                .basicAuthentication(pluginUsername, pluginPassword)
                 .build();
     }
 }

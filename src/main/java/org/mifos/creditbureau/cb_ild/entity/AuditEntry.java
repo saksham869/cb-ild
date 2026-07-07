@@ -64,6 +64,10 @@ public class AuditEntry {
     @Column(name = "request_id", length = 100)
     private String requestId;
 
+    // Fineract client ID — for audit trail lookup by client
+    @Column(name = "client_id")
+    private Long clientId;
+
     // Auto-set on insert — never set manually
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

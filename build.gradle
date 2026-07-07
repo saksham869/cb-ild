@@ -37,6 +37,9 @@ dependencies {
     implementation 'org.mapstruct:mapstruct:1.5.5.Final'
     annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.5.Final'
 
+    // HATEOAS — PagedModel for paginated responses
+    implementation 'org.springframework.boot:spring-boot-starter-hateoas'
+
     // Swagger / OpenAPI
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'
 
@@ -88,6 +91,10 @@ jacocoTestCoverageVerification {
 }
 
 check.dependsOn jacocoTestCoverageVerification
+
+tasks.named('compileJava') {
+    options.compilerArgs += ['-parameters']
+}
 
 tasks.named('test') {
     useJUnitPlatform()
